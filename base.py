@@ -71,7 +71,12 @@ class BaseSoC(SC.SoCCore):
 
         # Clock Reset Generation
         self.submodules.crg = CRG(platform.request("clk32"), ~platform.request("cpu_reset"))
-
+        # interrupts declaration
+        interrupt_map = {
+            "i2s" : 4
+        }
+        SC.SoCCore.interrupt_map.update(interrupt_map)
+        print (SC.SoCCore.interrupt_map)
 
 soc = BaseSoC(platform)
 
