@@ -20,7 +20,7 @@ class BitClock(Module, AutoCSR):
 
         self.comb += [
             bit_rate.eq(2*width_word*sample_freq),
-            If(bit_rate == 1411200, # Caso par 16 bits a frecuencia de 44100 Hz
+            If(bit_rate == 1411200, # Caso para 16 bits a frecuencia de 44100 Hz
                 clk_por_bit.eq(35)
             ),
             #bit_clock.eq(counter < clk_por_bit)
