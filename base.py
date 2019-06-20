@@ -60,11 +60,11 @@ platform = Platform()
 class BaseSoC(SC.SoCCore):
     # Peripherals CSR declaration
     csr_peripherals = {
-      "spiLCD":2,
-      "spiSD":3,
-      "GPIO":4,
-      "i2s":5,
-      "i2c":6
+      #"spiLCD":2,
+      #"spiSD":3,
+      #"GPIO":4,
+      "i2s":2
+      #"i2c":6
     }
     SC.SoCCore.csr_map=csr_peripherals
     # interrupts declaration
@@ -87,14 +87,14 @@ class BaseSoC(SC.SoCCore):
         self.submodules.crg = CRG(platform.request("clk32"), ~platform.request("cpu_reset"))
         # Modulos
         self.submodules.i2s = I2S(
-            platform.request("i2s_FLT"),
-            platform.request("i2s_DMP"),
+        #    platform.request("i2s_FLT"),
+        #    platform.request("i2s_DMP"),
             platform.request("i2s_SCL"),
             platform.request("i2s_BCK"),
-            platform.request("i2s_DIN"),
-            platform.request("i2s_LCK"),
-            platform.request("i2s_FMT"),
-            platform.request("i2s_XMT")
+        #    platform.request("i2s_DIN"),
+            platform.request("i2s_LCK")
+        #    platform.request("i2s_FMT"),
+        #    platform.request("i2s_XMT")
         )
 
 
