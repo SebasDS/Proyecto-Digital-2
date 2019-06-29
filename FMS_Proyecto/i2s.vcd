@@ -1,0 +1,7 @@
+$var wire 1 ! sys_clk $end
+$dumpvars
+$end
+#0
+0!
+#5
+0!
