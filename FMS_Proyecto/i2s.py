@@ -42,7 +42,7 @@ class _I2S(Module, AutoCSR):
         self.start = start = Signal()
         self.counter_bck = counter_bck = Signal(7)
         self.counter_scl = counter_scl = Signal(5)
-        self.counter_word = counter_word = Signal(5)
+        self.counter_word = counter_word = Signal(6)
         self.load_buffer = load_buffer = Signal()
         self.load_bit = load_bit = Signal()
         self.data_left = data_left = Signal(32)
@@ -148,7 +148,7 @@ class _I2S(Module, AutoCSR):
 
 
 class I2S(Module, AutoCSR):
-    def __init__(self, flt, dmp, scl, bck, din, lck, fmt, xmt, clk_freq):                                    #flt, dmp, scl, bck, din, lck, fmt, xmt):
+    def __init__(self, flt, dmp, scl, bck, sd, ws, fmt, xmt, clk_freq):                                    #flt, dmp, scl, bck, din, lck, fmt, xmt):
         self.Width_word = CSRStorage(32)
         self.Sample_Frecuency = CSRStorage(32)
         self.En_left = CSRStatus()
@@ -163,7 +163,7 @@ class I2S(Module, AutoCSR):
         #self.ev.zero = EventSourcePulse()
         #self.ev.finalize()
 
-        _i2s = _I2S(flt, dmp, scl, bck, din, lck, fmt, xmt, clk_freq)                                            #flt, dmp, scl, bck, din, lck, fmt, xmt)
+        _i2s = _I2S(flt, dmp, scl, bck, sd, ws, fmt, xmt, clk_freq)                                            #flt, dmp, scl, bck, din, lck, fmt, xmt)
         self.submodules += _i2s
 
         self.comb += [
