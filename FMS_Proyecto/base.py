@@ -24,14 +24,14 @@ _io = [
         IOStandard("LVCMOS33"),
     ),
 
-    ("i2s_FLT", 0, Pins("B13"), IOStandard("LVCMOS33")),
-    ("i2s_DMP", 0, Pins("F14"), IOStandard("LVCMOS33")),
-    ("i2s_SCL", 0, Pins("D17"), IOStandard("LVCMOS33")),
-    ("i2s_BCK", 0, Pins("E17"), IOStandard("LVCMOS33")),
-    ("i2s_DIN", 0, Pins("G13"), IOStandard("LVCMOS33")),
-    ("i2s_LCK", 0, Pins("C17"), IOStandard("LVCMOS33")),
-    ("i2s_FMT", 0, Pins("D18"), IOStandard("LVCMOS33")),
-    ("i2s_XMT", 0, Pins("E18"), IOStandard("LVCMOS33"))
+    ("i2s_FLT", 0, Pins("H4"), IOStandard("LVCMOS33")),
+    ("i2s_DMP", 0, Pins("H1"), IOStandard("LVCMOS33")),
+    ("i2s_SCL", 0, Pins("G1"), IOStandard("LVCMOS33")),
+    ("i2s_BCK", 0, Pins("G3"), IOStandard("LVCMOS33")),
+    ("i2s_DIN", 0, Pins("H2"), IOStandard("LVCMOS33")),
+    ("i2s_LCK", 0, Pins("G4"), IOStandard("LVCMOS33")),
+    ("i2s_FMT", 0, Pins("G2"), IOStandard("LVCMOS33")),
+    ("i2s_XMT", 0, Pins("F3"), IOStandard("LVCMOS33"))
 
 ]
 
@@ -68,10 +68,10 @@ class BaseSoC(SC.SoCCore):
     }
     SC.SoCCore.csr_map=csr_peripherals
     # interrupts declaration
-    interrupt_map = {
-        "i2s" : 4
-    }
-    SC.SoCCore.interrupt_map=interrupt_map
+    #interrupt_map = {
+    #    "i2s" : 4
+    #}
+    #SC.SoCCore.interrupt_map=interrupt_map
     print (SC.SoCCore.csr_map)
     def __init__(self, platform):
         sys_clk_freq = int(100e6)
@@ -94,8 +94,7 @@ class BaseSoC(SC.SoCCore):
             platform.request("i2s_DIN"),
             platform.request("i2s_LCK"),
             platform.request("i2s_FMT"),
-            platform.request("i2s_XMT"),
-            clk_freq
+            platform.request("i2s_XMT")
         )
 
 
