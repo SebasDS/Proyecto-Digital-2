@@ -48,8 +48,8 @@ class _I2S(Module, AutoCSR):
         self.data_left = data_left = Signal(32)
         self.data_right = data_right = Signal(32)
         self.buffer = buffer = Signal(32)
-        clk_bck = 0
-        clk_scl = 0
+        self.clk_bck = clk_bck = Signal(7)
+        self.clk_scl = clk_scl = Signal(5)
 
         # ingrese la lógica respectiva  para el periferico
         #########################################################################################
@@ -88,8 +88,6 @@ class _I2S(Module, AutoCSR):
                     NextValue(clk_bck, 70),
                     NextValue(clk_scl, 18),
                     NextState("CLOCKS")
-                ).Else(
-                    print("Frecuencia Invalida")
                 )
             ).Elif(width_word == 32,
                 If(sample_frecuency == 48000,
@@ -100,11 +98,7 @@ class _I2S(Module, AutoCSR):
                     NextValue(clk_bck, 36),
                     NextValue(clk_scl, 18),
                     NextState("CLOCKS")
-                ).Else(
-                    print("Frecuencia Invalida")
                 )
-            ).Else(
-                print("Tamaño de palabra Invalido")
             )
         )
         self.i2s_fsm.act("CLOCKS",
@@ -142,8 +136,8 @@ class _I2S(Module, AutoCSR):
             NextState("DATOS")
         )
         ##########################################################################################3
-        self.submodules.bitClock = BitClock(counter_bck, clk_bck/2, bck)
-        self.submodules.filClock = FilterClock(counter_scl, clk_scl/2, scl)
+        self.submodules.bitClock = BitClock(counter_bck, 35, bck)
+        self.submodules.filClock = FilterClock(counter_scl, 9, scl)
 
 
 
