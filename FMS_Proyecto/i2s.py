@@ -127,14 +127,14 @@ class _I2S(Module, AutoCSR):
                     print("Error en el tamaño de bits")
                 ),
                 NextValue(counter_word,counter_word+1),
-                If(load_buffer,
-                    NextState("LOAD")
-                )
+                
             ),
-
+            If(load_buffer,
+                    NextState("LOAD")
+            ),
         ),
         self.i2s_fsm.act("LOAD",
-            If(counter_word[4],
+            If(counter_word[4], #Para el caso de width_word = 16
                 NextValue(buffer, data_right),
             ).Else(
                 NextValue(buffer, data_left)
