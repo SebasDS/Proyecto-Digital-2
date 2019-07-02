@@ -66,7 +66,7 @@ class _I2S(Module, AutoCSR):
             ),
 
             # Contador para Reloj de Filtro
-            counter_bck.eq(counter_bck+1),
+            counter_scl.eq(counter_scl+1),
             If(counter_scl == clk_scl-1,
                 counter_scl.eq(0)
             )
