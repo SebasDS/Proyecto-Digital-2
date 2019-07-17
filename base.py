@@ -31,17 +31,42 @@ _io = [
     ("i2s_DIN", 0, Pins("H2"), IOStandard("LVCMOS33")),
     ("i2s_LCK", 0, Pins("G4"), IOStandard("LVCMOS33")),
     ("i2s_FMT", 0, Pins("G2"), IOStandard("LVCMOS33")),
-    ("i2s_XMT", 0, Pins("F3"), IOStandard("LVCMOS33"))
+    ("i2s_XMT", 0, Pins("F3"), IOStandard("LVCMOS33")),
+    ("i2s_start", 0, Pins("E16"), IOStandard("LVCMOS33"))
 
 ]
 
+'''
+_io = [
+    ("clk32", 0, Pins("P126"), IOStandard("LVCMOS33")),
+
+    ("cpu_reset", 0, Pins("P87"), IOStandard("LVCMOS33")),
+
+    ("serial", 0,
+        Subsignal("tx", Pins("P105")),
+        Subsignal("rx", Pins("P101")),
+        IOStandard("LVCMOS33"),
+    ),
+
+    ("i2s_FLT", 0, Pins("P24"), IOStandard("LVCMOS33")),
+    ("i2s_DMP", 0, Pins("P27"), IOStandard("LVCMOS33")),
+    ("i2s_SCL", 0, Pins("P32"), IOStandard("LVCMOS33")),
+    ("i2s_BCK", 0, Pins("P34"), IOStandard("LVCMOS33")),
+    ("i2s_DIN", 0, Pins("P61"), IOStandard("LVCMOS33")),
+    ("i2s_LCK", 0, Pins("P74"), IOStandard("LVCMOS33")),
+    ("i2s_FMT", 0, Pins("P62"), IOStandard("LVCMOS33")),
+    ("i2s_XMT", 0, Pins("P78"), IOStandard("LVCMOS33")),
+    ("i2s_start", 0, Pins("P80"), IOStandard("LVCMOS33"))
+
+]
+'''
 
 class Platform(XilinxPlatform):
     default_clk_name = "clk32"
     default_clk_period = 10
 
     def __init__(self):
-#        XilinxPlatform.__init__(self, "xc6slx9-TQG144-2", _io, toolchain="ise")
+     #XilinxPlatform.__init__(self, "xc6slx9-TQG144-2", _io, toolchain="ise")
         XilinxPlatform.__init__(self, "xc7a100t-CSG324-1", _io, toolchain="ise")
 
     def do_finalize(self, fragment):
@@ -63,10 +88,11 @@ class BaseSoC(SC.SoCCore):
       #"spiLCD":2,
       #"spiSD":3,
       #"GPIO":4,
-      "i2s":2
+      "i2s":5
       #"i2c":6
     }
     SC.SoCCore.csr_map=csr_peripherals
+
     # interrupts declaration
     #interrupt_map = {
     #    "i2s" : 4
@@ -94,11 +120,20 @@ class BaseSoC(SC.SoCCore):
             platform.request("i2s_DIN"),
             platform.request("i2s_LCK"),
             platform.request("i2s_FMT"),
-            platform.request("i2s_XMT")
+            platform.request("i2s_XMT"),
+            platform.request("i2s_start")
         )
+        ##include <stdio.h>
+        #include <stdlib.h>
+        #include <string.h>
+        #include <math.h>
 
+        #include <irq.h>
+        #include <uart.h>
+        #include <console.h>
+        #include <generated/csr.h>self.add_wb_slave(mem_decoder(self.mem_map["i2s_memory"]), self.logicmem.bus)
 
-        #print (SC.SoCCore.interrupt_map)
+        print (SC.SoCCore.interrupt_map)
 
 soc = BaseSoC(platform)
 

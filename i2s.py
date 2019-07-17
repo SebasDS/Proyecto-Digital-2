@@ -1,14 +1,22 @@
-#from scipy.io import wavfile
 from migen import *
+from migen.genlib.fsm import *
+from migen.genlib.fifo import *
 import math
 from litex.soc.interconnect.csr import *
 from litex.soc.interconnect.csr_eventmanager import *
-# @FABELTRANM  unal 2019
-# Modulo ejemplo para crear perifericos conectados con wishbone
-# Recuerde:
-#     CSRStorage: permite leer  y escribir en el Registro del periferico desde el procesador
-#     CSRStatus:  Unicamente leer el valor dle Reg
-#     la comunicación del software  con el peroférico se facilita conel archivo csr.h
+
+""" Modulo para generar cualquier señal de reloj:
+    Parametros:
+     counter: Señal contadora que debe aumentar su valor hasta un maximo.
+     cyc_lvl: Señal que determina el valor del contador en el cual el clk va a cambiar de estado,
+              esta debe ser de un valor mas pequeño que el valor maximo del counter. |--cyc_lvl--|
+     clk: Pin fisico por el que el clock debe salir.                                              ___________
+     phase: Bit que invierte el reloj si se activa, por defecto es 0 ===============>|___________|           |"""
+class Clock(Module, AutoCSR):
+    def __init__(self, counter, cyc_lvl, clk, phase=0):
+        self.comb += clk.eq(phase != (counter >= cyc_lvl))
+# Modulo para la configuracion inicial del DAC - PCM5102
+
 class Configuracion(Module, AutoCSR):
     def __init__(self, flt, dmp, fmt, xmt):
         self.comb += [
@@ -18,267 +26,275 @@ class Configuracion(Module, AutoCSR):
             xmt.eq(1)
         ]
 
-class FilterClock(Module, AutoCSR):
-    def __init__(self, sample_freq, scl):
-        self.fil_clock = fil_clock = Signal()
-        self.counter = counter = Signal(12)
-        self.fil_rate = fil_rate = Signal(23)
-        self.clk_por_period = clk_por_period = Signal(5)
+#Llenado de memoria
 
-
-        self.sync += [counter.eq(counter+1)]
-
-        self.comb += [
-            fil_rate.eq(128*sample_freq),
-            #If(fil_rate == 5644800, # Caso para 16 bits a frecuencia de 44100 Hz
-            clk_por_period.eq(9),
-            #),
-            fil_clock.eq(counter < clk_por_period),
-            scl.eq(fil_clock)
-        ]
-
-        self.sync +=[
-            If(counter == clk_por_period*2-1,
-                counter.eq(0)
-            ),
-        ]
-
-
-class BitClock(Module, AutoCSR):
-    def __init__(self, sample_freq, width_word, bck):
-        self.bit_clock = bit_clock = Signal()
-        self.counter = counter = Signal(12)
-        self.bit_rate = bit_rate = Signal(23)
-        self.clk_por_bit = clk_por_bit = Signal(12)
-        self.fl_up_bck = fl_up_bck = Signal()
-        self.fl_down_bck = fl_down_bck = Signal()
-
-
-        self.sync += [counter.eq(counter+1)]
-
-        self.comb += [
-            bit_rate.eq(2*width_word*sample_freq),
-            #If(bit_rate == 1411200, # Caso para 16 bits a frecuencia de 44100 Hz
-            clk_por_bit.eq(36),
-            #),
-            fl_up_bck.eq(counter == 69),
-            fl_down_bck.eq(counter == 34),
-            bit_clock.eq(counter < clk_por_bit),
-            bck.eq(bit_clock)
-        ]
-        #     #bit_clock.eq(counter < clk_por_bit)
-        #     If(counter == clk_por_bit*2,
-        #         counter.eq(0)
-        #     ).Else(
-        #         If(counter < clk_por_bit,
-        #             bit_clock.eq(1)
-        #         ).Else(
-        #             bit_clock.eq(0)
-        #         )
-        #     )
-        # ]
-        self.sync +=[
-            If(counter == clk_por_bit*2-1,
-                    counter.eq(0)
-                ),#.Else(
-                #    If(counter < clk_por_bit,
-                #        bit_clock.eq(1)
-                #    ).Else(
-                #        bit_clock.eq(0)
-                #    )
-                #),
-
-        ]
-
-class WordSelector(Module, AutoCSR):
-    def __init__(self, word_width, flanco_bajada, lck):
-        self.channel = channel = Signal()
-        self.counter = counter = Signal(7)
-        self.bit_reset = bit_reset = Signal(3)
-        self.fl_ws_up = fl_ws_up = Signal()
-        self.fl_ws_down = fl_ws_down = Signal()
-        self.fl_bits_up = fl_bits_up = Signal()
-        self.fl_bits_down = fl_bits_down = Signal()
-
-        self.comb += [
-            #If(word_width == 16,
-            #    br=5
-                #bit_reset.eq(5) #Caso para word_width = 16 bits
-            #).Else(
-            #    br=6
-                #bit_reset.eq(6) #Caso para word_width = 32 bits
-            #),
-            fl_ws_down.eq(flanco_bajada & (counter == 31)),
-            fl_ws_up.eq(flanco_bajada & (counter ==15)),
-            fl_bits_down.eq(flanco_bajada & (counter == 0)),
-            fl_bits_up.eq(flanco_bajada & (counter ==16)),
-
-            channel.eq(counter[4]),
-            lck.eq(channel)
-        ]
-
-        self.sync += [
-            #If(flanco_bajada == 1,
-            #    counter.eq(counter+1)
-            #),
-            counter.eq(counter+flanco_bajada),
-            If(counter[5] == 1,
-                counter.eq(0)
-            )
-        ]
-
-
-#class Serializacion(Module, AutoCSR):
-#    def __init__(self):
+# Modulo principal en el que se ejecuta la maquina de estados y la logica secuencial de carga y serializacion
 
 class _I2S(Module, AutoCSR):
-    def __init__(self, flt, dmp, scl, bck, din, lck, fmt, xmt):                                              # flt, dmp, scl, bck, din, lck, fmt, xmt):
-        self.Width_word = Width_word = Signal(32)
-        self.Sample_Frecuency  = Sample_Frecuency = Signal(32)
-        #self.Number_channels = Number_channels = Signal() # 0=mono, 1=estereo
-        self.Swap = Swap = Signal() #0=Direccion par al canal izquierdo, 1=Direccion par al canal derecho
-        #self.Enable_txrx = Enable_txrx = Signal() # 0=Transmision, 1=Recepcion
-        self.data_left = data_left = Signal(16)
-        self.data_right = data_right = Signal(16)
-        self.en_left_sw = en_left_sw = Signal()
-        self.en_right_sw = en_right_sw = Signal()
-        self.en_left = en_left = Signal()
-        self.en_right = en_right = Signal()
-        self.buffer = buffer = Signal(16)
-        self.bit_out = bit_out = Signal()
-        self.counter_bits = counter_bits = Signal(5)
-        self.counter_muestra = counter_muestra = Signal(6)
+    def __init__(self, flt, dmp, scl, bck, sd, ws, fmt, xmt):
 
-        #fs, data = wavefile.read("3A_La_Cucaracha-cvt.wav")
-        #print(fs+"\n")
-        #print(data)
-        cucaracha = open("3A_La_Cucaracha-cvt.wav","r")
-        i=0
-        dato=[]
-        start=True
-        cancion={}
-        while (1):
-            data_LSB = cucaracha.read(1)
-            data_MSB = cucaracha.read(1)
-            if not data_LSB:
-                break
-            dato = [ord(data_MSB),ord(data_LSB)]
-            cancion[i] = data_left.eq(dato[0]*256+dato[1])
-            print(dato)
-            i += 1
+##############################################################################################################
+        self.width_word = width_word = Signal(6)
+        self.divisor_bck = divisor_bck = Signal(7)
+        self.divisor_scl = divisor_scl = Signal(5)
+        self.start = start = Signal()
+        self.counter_bck = counter_bck = Signal(7)
+        self.counter_scl = counter_scl = Signal(5)
+        self.counter_ws = counter_ws = Signal(5)
+        self.counter_word = counter_word = Signal(5)
+        self.load_buffer = load_buffer = Signal()
+        self.load_bit = load_bit = Signal()
+        self.load_muestreo = load_muestreo = Signal()
+        self.buffer = buffer = Signal(32)
+        self.channel = channel = Signal()
+        ### Muestreo de prueba de una señal de audio a 1KHz, con frecuencia de muestreo de 44100Hz y ancho de palabra de 16bits ###
+        ''' sinusoidal_1000 = {}
+        for i in range(44):
+            sinusoidal_1000[i] =data_left.eq(int(round((math.sin(math.pi*2*1000*i/44100)+1)*16383)))
+            print (int(round((math.sin(math.pi*2*1000*i/44100)+1)*16383)))'''
+        #########################################################################################
+        self.r_en = r_en = Signal()
+        self.begin_save_1 = begin_save_1 = Signal()
+        self.begin_save_2 = begin_save_2 = Signal()
+        self.din = din = Signal(32)
+        self.sel_mem = sel_mem = Signal(reset=0)
+        #self.sel_mem_r = sel_mem_r = Signal(reset=1)
+        self.start_save = start_save = Signal()
 
-        cucaracha.close()
+        self.ctr_memoria_1 = ctr_memoria_1 = Signal(32)
+        self.ctr_memoria_2 = ctr_memoria_2 = Signal(32)
+
+        memoria1 = Memory(32, 44100)
+        self.specials += memoria1
+        port_1 = memoria1.get_port(write_capable=True)
+        #rport_1 = memoria1.get_port()
+
+        memoria2 = Memory(32, 44100)
+        self.specials += memoria2
+        port_2 = memoria2.get_port(write_capable=True)
+        #rport_2 = memoria2.get_port()
+
+        self.specials += [port_1, port_2]
 
 
-        cases = {}
-        sinusoidal_400 = {}
-
-        # for i in range(44):
-        #     sinusoidal_400[i] = data_left.eq(int(round((math.sin(math.pi*2*1000*i/44100)+1)*16383)))
-        #     print (int(round((math.sin(math.pi*2*1000*i/44100)+1)*16383)))
-
-        # # #
-        # Submodulo generador de reloj para bits
-        self.submodules.bitClock = BitClock(self.Sample_Frecuency, self.Width_word, bck)
-        self.submodules.wordSelect = WordSelector(self.Width_word, self.bitClock.fl_down_bck, lck)
-        self.submodules.filterClock = FilterClock(self.Sample_Frecuency, scl)
-        self.submodules.configuracion = Configuracion(flt, dmp, fmt, xmt)
-       # ingrese la lógica respectiva  para el periferico
-
-        for i in range(16):
-            cases[i] = din.eq(buffer[15-i])
-
-        self.sync += [
-            counter_bits.eq(counter_bits+self.bitClock.fl_down_bck),
-            counter_muestra.eq(counter_muestra+en_left_sw),
-            #If(counter_bits[4] == 1,
-            #    counter_bits.eq(0)
-            #),
-            en_left_sw.eq((~Swap & self.wordSelect.fl_ws_up) | (Swap & self.wordSelect.fl_ws_down)),
-            en_right_sw.eq((~Swap & self.wordSelect.fl_ws_down) | (Swap & self.wordSelect.fl_ws_up)),
-
-            en_left.eq((~Swap & self.wordSelect.fl_bits_up) | (Swap & self.wordSelect.fl_bits_down)),
-            en_right.eq((~Swap & self.wordSelect.fl_bits_down) | (Swap & self.wordSelect.fl_bits_up)),
-
-            If(en_left,
-                counter_bits.eq(0),
-                buffer.eq(data_left)
-            ).Elif(en_right,
-                counter_bits.eq(0),
-                buffer.eq(data_right)
+        self.submodules.i2s_mem_fsm = FSM(reset_state="IDLE")
+        self.i2s_mem_fsm.act("IDLE",
+            If(start_save,
+                If(sel_mem,
+                    NextValue(port_1.adr,0),
+                    NextValue(port_1.we,1),
+                    NextState("SAVE_1")
+                ).Else(
+                    NextValue(port_2.adr,0),
+                    NextValue(port_2.we,1),
+                    NextState("SAVE_2")
+                )
+            )
+        )
+        self.i2s_mem_fsm.act("SAVE_1",
+            If(r_en,
+                NextValue(port_1.dat_w, din),
+                NextValue(port_1.adr, port_1.adr+1),
+                #NextValue(filled, port_1.adr)
             ),
-
-            If((counter_muestra == len(cancion)) & en_left_sw,
-                counter_muestra.eq(0)
+            If(port_1.adr == 44100,
+                NextValue(port_1.adr,0),
+                NextValue(port_1.we,0),
+                NextState("IDLE")
+            )
+        )
+        self.i2s_mem_fsm.act("SAVE_2",
+            If(r_en,
+                NextValue(port_2.dat_w, din),
+                NextValue(port_2.adr,port_2.adr+1),
+                #NextValue(filled, wport_2.adr)
             ),
-
-        ]
-
-
+            If(port_2.adr == 44100,
+                NextValue(port_2.adr,0),
+                NextValue(port_2.we,0),
+                NextState("IDLE")
+            )
+        )
+        #########################################################################################
 
         self.comb += [
-            Swap.eq(0),
-            #data_left.eq(10986),
-            #data_right.eq(63669),
-            #bit_out.eq(buffer[15-self.wordSelect.counter])
-            If(self.wordSelect.channel,
-                Case(counter_muestra,cancion)
-                ),
-            Case(counter_bits, cases)
+            ### Asignacion de prueba para los registros de configuracion inicial ###
+            #width_word.eq(16),
+            # divisor_bck = Entero par mas cercano de 100MHz/(2*width_word*frecuencia_de_muestreo) Ej: 100000000/(1411200)
+            #divisor_bck.eq(35),
+
+            #divisor_scl.eq(9),
+            #########################################################################
+
+            # Enables para cargar bit, cargar buffer, cargar data_left/data_right
+            load_bit.eq(counter_bck == divisor_bck*2-1),
+            load_buffer.eq(counter_word == width_word),
+            load_muestreo.eq((counter_ws == width_word*2-1) & load_bit),
+
+            # Selector de palabra que define la carga en data_left ó data_right
+            channel.eq(counter_ws >= width_word),
         ]
+        #########################################################################################
+        self.sync += [
+            # Contador para Reloj de datos
+            counter_bck.eq(counter_bck+1),
+            If(counter_bck == divisor_bck*2-1,
+                counter_bck.eq(0)
+            ),
+
+            # Contador para Reloj de Filtro
+            counter_scl.eq(counter_scl+1),
+            If(counter_scl == divisor_scl*2-1,
+                counter_scl.eq(0)
+            ),
+            #ctr_memoria.eq(wport_1.dat_r),
+            #ctr_memoria_1.eq(port_1.adr),
+            #ctr_memoria_2.eq(port_2.adr),
+
+            If(~sel_mem,
+                begin_save_1.eq(port_1.adr==22050)
+            ),
+            If(sel_mem,
+                begin_save_2.eq(port_2.adr==22050)
+            )
+        ]
+        ########################################################################################3
+        self.submodules.i2s_fsm = FSM(reset_state="IDLE")
+        self.i2s_fsm.act("IDLE",
+            If(start,
+                NextState("RESET_CLOCKS")
+            )
+        )
+        self.i2s_fsm.act("RESET_CLOCKS",
+            NextValue(counter_bck, 0),
+            NextValue(counter_scl, 0),
+            NextValue(counter_ws, 0),
+            NextState("MEMORY")
+        )
+        self.i2s_fsm.act("SERIALIZAR",
+            If(load_bit,
+                If(width_word == 16,
+                    NextValue(sd, buffer[15]),
+                    NextValue(buffer, Cat(0,buffer[0:30]))
+                ).Elif(width_word == 32,
+                    NextValue(sd, buffer[31]),
+                    NextValue(buffer, Cat(0,buffer[0:30]))
+                ),
+                NextValue(counter_word,counter_word+1),
+                NextValue(counter_ws,counter_ws+1)
+
+            ),
+            If(load_buffer,
+                NextState("LOAD")
+            )
+        )
+        self.i2s_fsm.act("LOAD",
+            If(~sel_mem,
+                NextValue(buffer,port_1.dat_r),
+                NextValue(port_1.adr, port_1.adr+1),
+                If(port_1.adr==44100,
+                    NextState("MEMORY")
+                ).Else(
+                    NextValue(counter_word, 0),
+                    NextState("SERIALIZAR")
+                ),
+                #NextValue(begin_save,port_1.adr==22050)
+            ).Else(
+                NextValue(buffer,port_2.dat_r),
+                NextValue(port_2.adr, port_2.adr+1),
+                If(port_2.adr==44100,
+                    NextState("MEMORY")
+                ).Else(
+                    NextValue(counter_word, 0),
+                    NextState("SERIALIZAR")
+                ),
+                #NextValue(begin_save,port_2.adr==22050)
+            )
+        )
+        self.i2s_fsm.act("MEMORY",
+            NextValue(sel_mem, sel_mem+1),
+            NextState("LOAD")
+
+        )
+        ##########################################################################################3
 
 
+        ###########################################################################################3
+        self.submodules.bitClock = Clock(counter_bck, divisor_bck, bck)
+        self.submodules.filClock = Clock(counter_scl, divisor_scl, scl)
+        self.submodules.wordSelect = Clock(counter_ws, width_word, ws)
+        self.submodules.configuracion = Configuracion(flt, dmp, fmt, xmt)
+        ############################################################################################
 
 
 
 class I2S(Module, AutoCSR):
-    def __init__(self, flt, dmp, scl, bck, din, lck, fmt, xmt):                                    #flt, dmp, scl, bck, din, lck, fmt, xmt):
+    def __init__(self, flt, dmp, scl, bck, sd, ws, fmt, xmt, init):                                    #flt, dmp, scl, bck, din, lck, fmt, xmt):
         self.Width_word = CSRStorage(32)
-        self.Sample_Frecuency = CSRStorage(32)
-        #self.Number_channels = CSRStorage()
-        self.Swap = CSRStorage()
-        #self.Enable_txrx = CSRStorage()
-        self.En_left = CSRStatus()
-        self.En_right = CSRStatus()
-        self.data_left = CSRStorage(16)
-        self.data_right = CSRStorage(16)
+        self.Divisor_BCK = CSRStorage(7)
+        self.Divisor_SCL = CSRStorage(5)
 
+        self.Start_save = CSRStorage()
+        self.r_en = CSR()
+        self.to_memory = CSRStorage(32)
+        self.begin_save_1 = CSRStatus()
+        self.begin_save_2 = CSRStatus()
+
+        self.Start = CSRStorage()
+        self.Init = CSRStatus()
         # # #
-
+        self.ctr_memoria_1 = CSRStatus(32)
+        self.ctr_memoria_2 = CSRStatus(32)
         #self.submodules.ev = EventManager()
         #self.ev.zero = EventSourcePulse()
         #self.ev.finalize()
-
-        _i2s = _I2S(flt, dmp, scl, bck, din, lck, fmt, xmt)                                            #flt, dmp, scl, bck, din, lck, fmt, xmt)
+        _i2s = _I2S(flt, dmp, scl, bck, sd, ws, fmt, xmt)                                            #flt, dmp, scl, bck, din, lck, fmt, xmt)
         self.submodules += _i2s
 
         self.comb += [
-           _i2s.Width_word.eq(self.Width_word.storage),
-           _i2s.Sample_Frecuency.eq(self.Sample_Frecuency.storage),
-         #  _i2s.Number_channels.eq(self.Number_channels.storage),
-           _i2s.Swap.eq(self.Swap.storage),
-           #_i2s.Enable_txrx.eq(self.Enable_txrx.storage),
-           _i2s.data_left.eq(self.data_left.storage),
-           _i2s.data_right.eq(self.data_right.storage),
-           self.En_left.status.eq(_i2s.en_left_sw),
-           self.En_right.status.eq(_i2s.en_right_sw),
+           _i2s.width_word.eq(self.Width_word.storage),
+           _i2s.divisor_bck.eq(self.Divisor_BCK.storage),
+           _i2s.divisor_scl.eq(self.Divisor_SCL.storage),
+           _i2s.start.eq(self.Start.storage),
+           self.Init.status.eq(init),
+
+           _i2s.start_save.eq(self.Start_save.storage),
+           _i2s.r_en.eq(self.r_en.re),
+           _i2s.din.eq(self.to_memory.storage),
+           self.begin_save_1.status.eq(_i2s.begin_save_1),
+           self.begin_save_2.status.eq(_i2s.begin_save_2),
+           self.ctr_memoria_1.status.eq(_i2s.ctr_memoria_1),
+           self.ctr_memoria_2.status.eq(_i2s.ctr_memoria_2)
         ]
 
 if __name__ == '__main__':
     bck = Signal()
-    lck = Signal()
-    din = Signal()
+    ws = Signal()
+    sd = Signal()
     scl = Signal()
     flt = Signal()
     dmp = Signal()
     fmt = Signal()
     xmt = Signal()
-    dut = _I2S(flt, dmp, scl, bck, din, lck, fmt, xmt)
+    dut = _I2S(flt, dmp, scl, bck, sd, ws, fmt, xmt)
 
     def dut_tb(dut):
-        yield dut.Width_word.eq(16)
-        yield dut.Sample_Frecuency.eq(44100)
-        for i in range(10000):
-        	yield
+        #yield dut.data_left.eq(10986)
+        #yield dut.data_right.eq(30901)
+        yield dut.width_word.eq(16)
+        yield dut.divisor_bck.eq(35)
+        yield dut.divisor_scl.eq(9)
+        yield dut.start_save.eq(1)
+        #while dut.filled.status != 44100:
+        yield dut.din.eq(30901)
 
+        #    yield dut.r_en.storage.eq(1)
+        #yield dut.Start_save.storage.eq(0)
+        #yield dut.Start.storage.eq(1)
+        #
+        for i in range(100000):
+            yield
+            yield dut.r_en.eq(1)
+            yield
+            yield dut.r_en.eq(0)
     run_simulation(dut, dut_tb(dut), vcd_name="i2s.vcd")
